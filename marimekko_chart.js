@@ -1,5 +1,5 @@
 /**
- * Marimekko chart with D3 injected manually
+ * Marimekko chart with safe width handling and D3 injection
  */
 const marimekko = {
   id: 'variable_width_area_chart',
@@ -24,7 +24,7 @@ const marimekko = {
     bar_padding: {
       type: 'number',
       label: 'Bar Padding (px)',
-      default: 1
+      default: 0
     },
     font_size: {
       type: 'number',
@@ -40,7 +40,6 @@ const marimekko = {
   },
 
   create: function (element, config) {
-    // Inject D3.js manually
     if (!window.d3) {
       const script = document.createElement('script')
       script.src = 'https://d3js.org/d3.v6.min.js'
@@ -130,7 +129,7 @@ const marimekko = {
       .enter()
       .append('rect')
       .attr('x', d => xScale(d.x0))
-      .attr('width', d => xScale(d.width) - config.bar_padding)
+      .attr('width', d => Math.max(0, xScale(d.width) - config.bar_padding))
       .attr('y', d => yScale(d.metric))
       .attr('height', d => height - yScale(d.metric))
       .attr('fill', config.bar_color)
