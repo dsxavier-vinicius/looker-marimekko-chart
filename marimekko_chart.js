@@ -1,6 +1,3 @@
-/**
- * Marimekko chart with safe width handling and D3 injection
- */
 const marimekko = {
   id: 'variable_width_area_chart',
   label: 'Variable Width Area Chart (Marimekko)',
@@ -51,14 +48,8 @@ const marimekko = {
 
     element.innerHTML = `
       <style>
-        .mekko text {
-          text-anchor: middle;
-        }
-        .axis path,
-        .axis line {
-          fill: none;
-          stroke: #000;
-        }
+        .mekko text { text-anchor: middle; }
+        .axis path, .axis line { fill: none; stroke: #000; }
       </style>
       <svg width="100%" height="400"></svg>
     `
@@ -95,13 +86,24 @@ const marimekko = {
       return
     }
 
-    let parsed = data.map(d => ({
-      label: d[fields[0].name]?.value ?? '',
-      population: parseFloat(d[fields[1].name]?.value ?? 0),
-      metric: parseFloat(d[fields[2].name]?.value ?? 0)
-    })).filter(d => !isNaN(d.population) && !isNaN(d.metric))
+    const labelField = fields[0].name
+    const populationField = fields[1].name
+    const metricField = fields[2].name
 
-    if (!parsed.length) {
+    // Filtra e valida
+    let parsed = data.map(d => {
+      const pop = parseFloat(d[populationField]?.value)
+      const met = parseFloat(d[metricField]?.value)
+      return {
+        label: d[labelField]?.value ?? '',
+        population: isNaN(pop) ? 0 : pop,
+        metric: isNaN(met) ? 0 : met
+      }
+    }).filter(d => d.population > 0 && d.metric >= 0)
+
+    const totalPop = d3.sum(parsed, d => d.population)
+
+    if (!parsed.length || totalPop === 0) {
       g.append('text')
         .text('⚠️ No valid numeric data.')
         .attr('x', 10)
@@ -111,7 +113,6 @@ const marimekko = {
       return
     }
 
-    const totalPop = d3.sum(parsed, d => d.population)
     let cumulative = 0
     parsed.forEach(d => {
       d.x0 = cumulative
@@ -120,9 +121,7 @@ const marimekko = {
     })
 
     const xScale = d3.scaleLinear().domain([0, 1]).range([0, width])
-    const yScale = d3.scaleLinear()
-      .domain([0, d3.max(parsed, d => d.metric)])
-      .range([height, 0])
+    const yScale = d3.scaleLinear().domain([0, d3.max(parsed, d => d.metric)]).range([height, 0])
 
     g.selectAll('rect')
       .data(parsed)
@@ -149,8 +148,7 @@ const marimekko = {
     }
 
     if (config.show_y_axis) {
-      g.append('g')
-        .call(d3.axisLeft(yScale))
+      g.append('g').call(d3.axisLeft(yScale))
     }
 
     doneRendering()
