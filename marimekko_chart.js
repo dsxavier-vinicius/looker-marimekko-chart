@@ -1,5 +1,3 @@
-import * as d3 from 'd3'
-
 /**
  * @type {import('./types/looker').VisualizationDefinition}
  */
