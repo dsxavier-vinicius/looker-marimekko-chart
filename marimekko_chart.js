@@ -1,5 +1,5 @@
 /**
- * @type {import('./types/looker').VisualizationDefinition}
+ * Marimekko chart with D3 injected manually
  */
 const marimekko = {
   id: 'variable_width_area_chart',
@@ -40,6 +40,16 @@ const marimekko = {
   },
 
   create: function (element, config) {
+    // Inject D3.js manually
+    if (!window.d3) {
+      const script = document.createElement('script')
+      script.src = 'https://d3js.org/d3.v6.min.js'
+      script.onload = () => this._ready = true
+      document.head.appendChild(script)
+    } else {
+      this._ready = true
+    }
+
     element.innerHTML = `
       <style>
         .mekko text {
@@ -56,6 +66,12 @@ const marimekko = {
   },
 
   updateAsync: function (data, element, config, queryResponse, details, doneRendering) {
+    if (!this._ready || typeof d3 === 'undefined') {
+      console.warn('D3 not loaded yet. Waiting...')
+      setTimeout(() => this.updateAsync(data, element, config, queryResponse, details, doneRendering), 300)
+      return
+    }
+
     const svg = d3.select(element).select('svg')
     svg.selectAll('*').remove()
 
@@ -69,8 +85,7 @@ const marimekko = {
 
     const fields = queryResponse.fields.dimensions.concat(queryResponse.fields.measures)
 
-    // ⚠️ Validação: precisa de 1 dimensão + 2 medidas
-    if (fields.length < 3) {
+    if (fields.length < 3 || !data.length) {
       g.append('text')
         .text('⚠️ Add 1 dimension and 2 numeric measures.')
         .attr('x', 10)
@@ -81,19 +96,18 @@ const marimekko = {
       return
     }
 
-    const parsed = data.map(d => ({
+    let parsed = data.map(d => ({
       label: d[fields[0].name]?.value ?? '',
-      population: +d[fields[1].name]?.value ?? 0,
-      metric: +d[fields[2].name]?.value ?? 0
+      population: parseFloat(d[fields[1].name]?.value ?? 0),
+      metric: parseFloat(d[fields[2].name]?.value ?? 0)
     })).filter(d => !isNaN(d.population) && !isNaN(d.metric))
 
-    if (parsed.length === 0) {
+    if (!parsed.length) {
       g.append('text')
-        .text('⚠️ No valid data to render chart.')
+        .text('⚠️ No valid numeric data.')
         .attr('x', 10)
         .attr('y', 20)
         .style('fill', 'red')
-        .style('font-size', '14px')
       doneRendering()
       return
     }
@@ -111,7 +125,6 @@ const marimekko = {
       .domain([0, d3.max(parsed, d => d.metric)])
       .range([height, 0])
 
-    // 🔷 Barras
     g.selectAll('rect')
       .data(parsed)
       .enter()
@@ -122,7 +135,6 @@ const marimekko = {
       .attr('height', d => height - yScale(d.metric))
       .attr('fill', config.bar_color)
 
-    // 🔠 Labels
     if (config.show_labels) {
       g.selectAll('text.label')
         .data(parsed)
@@ -134,12 +146,11 @@ const marimekko = {
         .text(d => d.label)
         .style('fill', config.font_color)
         .style('font-size', config.font_size + 'px')
+        .style('text-anchor', 'middle')
     }
 
-    // 🧭 Eixo Y
     if (config.show_y_axis) {
       g.append('g')
-        .attr('class', 'axis')
         .call(d3.axisLeft(yScale))
     }
 
