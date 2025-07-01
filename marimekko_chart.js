@@ -64,21 +64,43 @@ const marimekko = {
     const margin = { top: 20, right: 20, bottom: 40, left: 50 }
     const width = element.clientWidth - margin.left - margin.right
     const height = 400 - margin.top - margin.bottom
+
     const g = svg.append('g')
       .attr('class', 'mekko')
       .attr('transform', `translate(${margin.left},${margin.top})`)
 
     const fields = queryResponse.fields.dimensions.concat(queryResponse.fields.measures)
 
+    // ⚠️ Validação: precisa de 1 dimensão + 2 medidas
+    if (fields.length < 3) {
+      g.append('text')
+        .text('⚠️ Add 1 dimension and 2 numeric measures.')
+        .attr('x', 10)
+        .attr('y', 20)
+        .style('fill', 'red')
+        .style('font-size', '14px')
+      doneRendering()
+      return
+    }
+
     const parsed = data.map(d => ({
-      label: d[fields[0].name].value,
-      population: +d[fields[1].name].value,   // Width
-      metric: +d[fields[2].name].value        // Height
-    }))
+      label: d[fields[0].name]?.value ?? '',
+      population: +d[fields[1].name]?.value ?? 0,
+      metric: +d[fields[2].name]?.value ?? 0
+    })).filter(d => !isNaN(d.population) && !isNaN(d.metric))
+
+    if (parsed.length === 0) {
+      g.append('text')
+        .text('⚠️ No valid data to render chart.')
+        .attr('x', 10)
+        .attr('y', 20)
+        .style('fill', 'red')
+        .style('font-size', '14px')
+      doneRendering()
+      return
+    }
 
     const totalPop = d3.sum(parsed, d => d.population)
-
-    // Compute x positions
     let cumulative = 0
     parsed.forEach(d => {
       d.x0 = cumulative
@@ -91,7 +113,7 @@ const marimekko = {
       .domain([0, d3.max(parsed, d => d.metric)])
       .range([height, 0])
 
-    // Draw variable-width rectangles
+    // 🔷 Barras
     g.selectAll('rect')
       .data(parsed)
       .enter()
@@ -102,12 +124,13 @@ const marimekko = {
       .attr('height', d => height - yScale(d.metric))
       .attr('fill', config.bar_color)
 
-    // Optional: Add category labels
+    // 🔠 Labels
     if (config.show_labels) {
-      g.selectAll('text')
+      g.selectAll('text.label')
         .data(parsed)
         .enter()
         .append('text')
+        .attr('class', 'label')
         .attr('x', d => xScale(d.x0 + d.width / 2))
         .attr('y', height - 5)
         .text(d => d.label)
@@ -115,7 +138,7 @@ const marimekko = {
         .style('font-size', config.font_size + 'px')
     }
 
-    // Y Axis
+    // 🧭 Eixo Y
     if (config.show_y_axis) {
       g.append('g')
         .attr('class', 'axis')
