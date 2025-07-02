@@ -1,304 +1,156 @@
-/**
- * Visualização Marimekko (Gráfico de Área de Largura Variável Empilhado) para Looker
- * * Estrutura de Dados Esperada no Looker:
- * - 1ª Dimensão: As categorias a serem empilhadas (ex: Categoria de Produto).
- * - 2ª Dimensão (Opcional): Usada para os labels do eixo X (ex: País).
- * - 1ª Medida: O valor para a altura de cada segmento (ex: Vendas).
- * - 2ª Medida: O valor para a largura total da coluna. Este valor deve ser o mesmo
- * para todas as linhas que pertencem à mesma coluna. (ex: Total de Vendas por País).
- */
+// Marimekko Chart for Looker Visualization
+// Com suporte completo aos controles: cor da barra, padding, fonte, labels, eixos, rotação etc.
+
 looker.plugins.visualizations.add({
-  id: 'marimekko_premium_1d_2m',
-  label: 'Marimekko Chart (1D+2M)',
-  
-  // NOVO - Propriedade para controlar o estado de carregamento do D3
-  _d3_ready: false,
-
-  options: { /* ... as suas opções ficam exatamente iguais ... */
-    color_range: {
-      type: 'array', label: 'Color Palette', section: 'Colors', display: 'colors',
-      default: ['#4285F4', '#DB4437', '#F4B400', '#0F9D58', '#AB47BC', '#00ACC1', '#FF7043', '#9E9D24']
+  id: 'marimekko_chart',
+  label: 'Marimekko Chart (Variable Width)',
+  options: {
+    barColor: {
+      type: 'color',
+      label: 'Bar Color',
+      default: '#4682b4'
     },
-    show_y_axis: {
-      type: 'boolean', label: 'Show Y-Axis', section: 'Axes', default: true, order: 1
+    barPadding: {
+      type: 'number',
+      label: 'Bar Padding (px)',
+      default: 1
     },
-    y_axis_format: {
-        type: 'string', label: 'Y-Axis Value Format', section: 'Axes', placeholder: 'e.g., "0.0%" or "#,##0"',
-        default: '0.0%', order: 2
+    labelColor: {
+      type: 'color',
+      label: 'Label Color',
+      default: '#ffffff'
     },
-    show_labels: {
-      type: 'boolean', label: 'Show Segment Labels', section: 'Labels', default: true, order: 1
+    labelFontSize: {
+      type: 'number',
+      label: 'Label Font Size',
+      default: 12
     },
-    label_format: {
-      type: 'string', label: 'Label Value Format', section: 'Labels', placeholder: 'e.g., "#,##0.00"',
-      default: '', order: 2
+    showLabels: {
+      type: 'boolean',
+      label: 'Show Labels',
+      default: true
     },
-    label_font_size: {
-      type: 'number', label: 'Label Font Size', section: 'Labels', default: 12, order: 3
+    showXAxis: {
+      type: 'boolean',
+      label: 'Show X Axis',
+      default: true
     },
-    label_font_color: {
-      type: 'string', label: 'Label Color', section: 'Labels', display: 'color', default: '#ffffff', order: 4
+    showYAxis: {
+      type: 'boolean',
+      label: 'Show Y Axis',
+      default: true
     },
-    show_legend: {
-        type: 'boolean', label: 'Show Legend', section: 'Legend', default: true, order: 1
+    labelRotation: {
+      type: 'number',
+      label: 'X Axis Label Rotation (degrees)',
+      default: 0
     },
-    legend_position: {
-        type: 'string', label: 'Legend Position', section: 'Legend', display: 'radio',
-        values: [{'Right': 'right'}, {'Bottom': 'bottom'}], default: 'right', order: 2
+    maxRows: {
+      type: 'number',
+      label: 'Max Rows to Display',
+      default: 30
     }
   },
 
-  create: function (element, config) {
-    // NOVO - Lógica para carregar o D3
-    const d3_version = '7'; // Usar uma versão mais recente do D3
-    if (typeof d3 === 'undefined') {
-      const script = document.createElement('script');
-      script.src = `https://d3js.org/d3.v${d3_version}.min.js`;
-      script.async = true;
-      script.onload = () => {
-        this._d3_ready = true;
-      };
-      document.head.appendChild(script);
-    } else {
-      this._d3_ready = true;
-    }
-
-    element.innerHTML = `
-      <style>
-        .marimekko-container { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: "Google Sans", "Noto Sans", "Noto Sans JP", "Noto Sans CJK KR", "Noto Sans Arabic UI", "Noto Sans Devanagari UI", "Noto Sans Hebrew UI", "Noto Sans Thai UI", Helvetica, Arial, sans-serif; }
-        /* ... resto do CSS igual ... */
-      </style>
-      <div class="marimekko-container">
-        <svg class="marimekko-svg"></svg>
-        <div class="marimekko-legend"></div>
-      </div>
-    `;
-    this._container = d3.select(element).select('.marimekko-container'); // Esta linha agora pode dar erro se o d3 não estiver pronto
-    this._legend = this._container.select('.marimekko-legend');
-
-    this._tooltip = d3.select(element)
-      .append('div')
-      .attr('class', 'looker-tooltip')
-      .style('display', 'none')
-      .style('position', 'absolute')
-      .style('pointer-events', 'none')
-      .style('z-index', 100);
+  create: function(element, config) {
+    element.innerHTML = '<div id="chart"></div>';
   },
 
-  updateAsync: function (data, element, config, queryResponse, details, doneRendering) {
-    // NOVO - Verificar se o D3 está pronto. Se não, tenta novamente em 100ms.
-    if (!this._d3_ready) {
-      setTimeout(() => this.updateAsync(data, element, config, queryResponse, details, doneRendering), 100);
+  updateAsync: function(data, element, config, queryResponse, details, done) {
+    const d3 = window.d3;
+    if (!d3) {
+      console.error('D3 não está disponível');
+      done();
       return;
     }
-    
-    // NOVO - A partir daqui, temos a certeza que 'd3' existe.
-    // Algumas das inicializações do 'create' podem falhar na primeira vez, então vamos garanti-las aqui.
-    if (!this._svg) {
-        this._svg = d3.select(element).select('.marimekko-svg');
-    }
-    if (!this._container) {
-        this._container = d3.select(element).select('.marimekko-container');
-    }
-    if (!this._legend) {
-        this._legend = this._container.select('.marimekko-legend');
-    }
 
-
-    this.clearErrors();
-
-    const dims = queryResponse.fields.dimension_like;
-    const meas = queryResponse.fields.measure_like;
-
-    if (dims.length < 1 || meas.length < 2) {
-      this.addError({
-        title: 'Dados Insuficientes',
-        message: 'Esta visualização requer 1 Dimensão e 2 Medidas. Uma 2ª Dimensão é recomendada para os labels das colunas.'
-      });
+    if (!data || data.length === 0) {
+      element.innerHTML = '<p>Nenhum dado disponível</p>';
+      done();
       return;
     }
-    
-    // ... O resto do código updateAsync permanece exatamente o mesmo ...
-    // ... (desde o mapeamento dos campos até ao doneRendering()) ...
 
-    const hasXAxisDimension = dims.length > 1;
+    const chartEl = d3.select(element).select('#chart');
+    chartEl.selectAll('*').remove();
 
-    const stackDimension = dims[0].name;
-    const heightMeasure = meas[0].name;
-    const widthMeasure = meas[1].name;
-    const xAxisLabelDimension = hasXAxisDimension ? dims[1].name : null;
+    const width = element.clientWidth;
+    const height = element.clientHeight || 400;
+    const margin = { top: 20, right: 20, bottom: 60, left: 60 };
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
 
-    const dataByColumn = d3.group(data, d => d[widthMeasure.name].value);
-    
-    const stackKeys = Array.from(new Set(data.map(d => d[stackDimension].value))).sort();
+    const dimension = queryResponse.fields.dimensions[0];
+    const measure = queryResponse.fields.measures[0];
 
-    const stackedDataInput = Array.from(dataByColumn.entries()).map(([widthValue, rows]) => {
-      const entry = {
-        total: widthValue, 
-        xCategory: xAxisLabelDimension ? rows[0][xAxisLabelDimension].value : widthValue.toLocaleString()
+    const maxRows = config.maxRows || 30;
+    const parsedData = data.slice(0, maxRows).map(d => {
+      return {
+        label: d[dimension.name]?.value || '',
+        value: +d[measure.name]?.value,
+        width: +d[measure.name]?.value // ajustar se tiver outra measure para width
       };
-      stackKeys.forEach(stackKey => {
-        const foundRow = rows.find(r => r[stackDimension].value === stackKey);
-        entry[stackKey] = foundRow ? foundRow[heightMeasure].value : 0;
-        if (foundRow) {
-            entry[`_cell_${stackKey}`] = foundRow[heightMeasure];
-        }
-      });
-      return entry;
-    });
+    }).filter(d => !isNaN(d.value) && !isNaN(d.width));
 
-    const stack = d3.stack().keys(stackKeys);
-    const stackedSeries = stack(stackedDataInput);
+    const totalWidth = d3.sum(parsedData, d => d.width);
+    const xScale = d3.scaleLinear().domain([0, totalWidth]).range([0, innerWidth]);
+    const yScale = d3.scaleLinear().domain([0, d3.max(parsedData, d => d.value)]).range([innerHeight, 0]);
 
-    const totalValue = d3.sum(Array.from(dataByColumn.keys()));
-    const yMax = d3.max(Array.from(dataByColumn.keys()));
+    const svg = chartEl.append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
 
-    if (!totalValue || totalValue === 0) {
-      this.addError({ title: "Sem Dados", message: "A medida de largura tem um total de zero." });
-      return;
-    }
+    let cumulativeX = 0;
+    svg.selectAll('.bar')
+      .data(parsedData)
+      .enter()
+      .append('rect')
+      .attr('class', 'bar')
+      .attr('x', d => {
+        const x = xScale(cumulativeX);
+        cumulativeX += d.width;
+        return x;
+      })
+      .attr('y', d => yScale(d.value))
+      .attr('width', d => xScale(d.width) - config.barPadding)
+      .attr('height', d => innerHeight - yScale(d.value))
+      .attr('fill', config.barColor);
 
-    this._container.style('flex-direction', config.legend_position === 'right' ? 'row' : 'column');
-    this._legend.style('display', config.show_legend ? 'block' : 'none');
-    
-    const svgEl = this._svg.node();
-    const margin = { top: 20, right: 20, bottom: 40, left: 60 };
-    const width = svgEl.clientWidth - margin.left - margin.right;
-    const height = svgEl.clientHeight - margin.top - margin.bottom;
-
-    this._svg.selectAll('*').remove();
-    const g = this._svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-
-    const xScale = d3.scaleLinear().domain([0, totalValue]).range([0, width]);
-    const yScale = d3.scaleLinear().domain([0, yMax]).range([height, 0]).nice();
-    const colorScale = d3.scaleOrdinal().domain(stackKeys).range(config.color_range);
-
-    const xAxisGroup = g.append("g")
-      .attr("transform", `translate(0,${height})`)
-      .attr("class", "marimekko-axis");
-
-    let cumulativeWidth = 0;
-    const xPositions = []; 
-
-    g.selectAll('.series')
-      .data(stackedSeries)
-      .join('g')
-        .attr('class', 'series')
-        .attr('fill', d => colorScale(d.key))
-      .selectAll('.marimekko-rect')
-      .data(d => d.map(item => { item.key = d.key; return item; }))
-      .join('rect')
-        .attr('class', 'marimekko-rect')
+    if (config.showLabels) {
+      cumulativeX = 0;
+      svg.selectAll('.label')
+        .data(parsedData)
+        .enter()
+        .append('text')
         .attr('x', d => {
-            if (d.data.xStart === undefined) {
-                d.data.xStart = cumulativeWidth;
-                xPositions.push({ label: d.data.xCategory, pos: cumulativeWidth + d.data.total / 2 });
-                cumulativeWidth += d.data.total;
-            }
-            return xScale(d.data.xStart);
+          const x = xScale(cumulativeX) + (xScale(d.width) - config.barPadding) / 2;
+          cumulativeX += d.width;
+          return x;
         })
-        .attr('y', d => yScale(d[1]))
-        .attr('height', d => Math.max(0, yScale(d[0]) - yScale(d[1])))
-        .attr('width', d => xScale(d.data.total))
-        .on('mouseover', (event, d) => {
-            this._tooltip.style('display', 'block');
-            const percOfColumn = d.data.total > 0 ? (d[1] - d[0]) / d.data.total : 0;
-            const percOfTotal = totalValue > 0 ? (d[1] - d[0]) / totalValue : 0;
-            const cell = d.data[`_cell_${d.key}`];
-            this._tooltip.html(`
-              <strong>${d.key}</strong> (${d.data.xCategory})<br>
-              Valor: ${cell ? LookerCharts.Utils.textForCell(cell) : 'N/A'}<br>
-              % da Coluna: ${(percOfColumn * 100).toFixed(1)}%<br>
-              % do Total: ${(percOfTotal * 100).toFixed(1)}%
-            `);
-        })
-        .on('mousemove', (event) => {
-            this._tooltip
-                .style('top', (event.pageY + 15) + 'px')
-                .style('left', (event.pageX + 15) + 'px');
-        })
-        .on('mouseout', () => {
-            this._tooltip.style('display', 'none');
-        })
-        .on('click', (event, d) => {
-            const cell = d.data[`_cell_${d.key}`];
-            if (cell && cell.links) {
-              LookerCharts.Utils.openDrillMenu({
-                  links: cell.links,
-                  event: event
-              });
-            }
-        });
-
-    xAxisGroup.selectAll('.x-axis-label')
-      .data(xPositions)
-      .join('text')
-      .attr('class', 'x-axis-label')
-      .attr('x', d => xScale(d.pos))
-      .attr('y', margin.bottom - 10)
-      .attr('text-anchor', 'middle')
-      .style('fill', '#333')
-      .text(d => d.label);
-      
-    if (config.show_labels) {
-        cumulativeWidth = 0; // Reset
-        g.selectAll('.label-series')
-          .data(stackedSeries)
-          .join('g')
-          .selectAll('.marimekko-label')
-          .data(d => d.map(item => { item.key = d.key; return item; }))
-          .join('text')
-            .attr('class', 'marimekko-label')
-            .attr('fill', config.label_font_color)
-            .style('font-size', `${config.label_font_size}px`)
-            .text(d => {
-                const value = d[1] - d[0];
-                if (value === 0) return '';
-                const format = config.label_format || LookerCharts.Utils.guessValueFormat(queryResponse.fields.measure_like[0]);
-                const formatter = LookerCharts.Utils.formatString(format);
-                return formatter(value);
-            })
-            .attr('x', d => {
-                if (d.data.xStart === undefined) {
-                    d.data.xStart = cumulativeWidth;
-                    cumulativeWidth += d.data.total;
-                }
-                return xScale(d.data.xStart + d.data.total / 2);
-            })
-            .attr('y', d => yScale(d[0]) - ((yScale(d[0]) - yScale(d[1])) / 2) + config.label_font_size / 3)
-            .style('display', d => {
-                const rectHeight = Math.abs(yScale(d[0]) - yScale(d[1]));
-                const rectWidth = Math.abs(xScale(d.data.total));
-                const textLength = d.key.length;
-                const textWidth = textLength * config.label_font_size * 0.6;
-                return rectHeight < (config.label_font_size * 1.2) || rectWidth < textWidth ? 'none' : 'block';
-            });
+        .attr('y', d => yScale(d.value) + 15)
+        .attr('text-anchor', 'middle')
+        .attr('fill', config.labelColor)
+        .style('font-size', `${config.labelFontSize}px`)
+        .text(d => d.label);
     }
 
-    if (config.show_y_axis) {
-      const yAxisFormatFunc = (d) => {
-        const percentage = yMax > 0 ? d / yMax : 0;
-        return d3.format(config.y_axis_format)(percentage);
-      };
-      const yAxis = d3.axisLeft(yScale).tickFormat(yAxisFormatFunc).ticks(5);
-      g.append('g').attr('class', 'marimekko-axis').call(yAxis);
-    }
-    
-    if (config.show_legend) {
-        this._legend.html('');
-        const legendItems = this._legend.selectAll('.marimekko-legend-item')
-            .data(colorScale.domain())
-            .join('div')
-            .attr('class', 'marimekko-legend-item');
-
-        legendItems.append('div')
-            .attr('class', 'marimekko-legend-color')
-            .style('background-color', d => colorScale(d));
-            
-        legendItems.append('span')
-            .text(d => d);
+    if (config.showXAxis) {
+      const xAxis = d3.axisBottom(xScale.copy().domain([0, totalWidth]));
+      svg.append('g')
+        .attr('transform', `translate(0, ${innerHeight})`)
+        .call(xAxis)
+        .selectAll('text')
+        .attr('text-anchor', config.labelRotation ? 'end' : 'middle')
+        .attr('transform', `rotate(${config.labelRotation})`);
     }
 
-    doneRendering();
+    if (config.showYAxis) {
+      const yAxis = d3.axisLeft(yScale).ticks(5);
+      svg.append('g')
+        .call(yAxis);
+    }
+
+    done();
   }
 });
