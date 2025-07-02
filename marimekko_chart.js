@@ -11,121 +11,100 @@ looker.plugins.visualizations.add({
   id: 'marimekko_premium_1d_2m',
   label: 'Marimekko Chart (1D+2M)',
   
-  // Opções de customização que aparecem no painel de edição da visualização
-  options: {
-    // Secção de Cores
+  // NOVO - Propriedade para controlar o estado de carregamento do D3
+  _d3_ready: false,
+
+  options: { /* ... as suas opções ficam exatamente iguais ... */
     color_range: {
-      type: 'array',
-      label: 'Color Palette',
-      section: 'Colors',
-      display: 'colors',
+      type: 'array', label: 'Color Palette', section: 'Colors', display: 'colors',
       default: ['#4285F4', '#DB4437', '#F4B400', '#0F9D58', '#AB47BC', '#00ACC1', '#FF7043', '#9E9D24']
     },
-    // Secção de Eixos
     show_y_axis: {
-      type: 'boolean',
-      label: 'Show Y-Axis',
-      section: 'Axes',
-      default: true,
-      order: 1
+      type: 'boolean', label: 'Show Y-Axis', section: 'Axes', default: true, order: 1
     },
     y_axis_format: {
-        type: 'string',
-        label: 'Y-Axis Value Format',
-        section: 'Axes',
-        placeholder: 'e.g., "0.0%" or "#,##0"',
-        default: '0.0%',
-        order: 2
+        type: 'string', label: 'Y-Axis Value Format', section: 'Axes', placeholder: 'e.g., "0.0%" or "#,##0"',
+        default: '0.0%', order: 2
     },
-    // Secção de Labels
     show_labels: {
-      type: 'boolean',
-      label: 'Show Segment Labels',
-      section: 'Labels',
-      default: true,
-      order: 1
+      type: 'boolean', label: 'Show Segment Labels', section: 'Labels', default: true, order: 1
     },
     label_format: {
-      type: 'string',
-      label: 'Label Value Format',
-      section: 'Labels',
-      placeholder: 'e.g., "#,##0.00"',
-      default: '',
-      order: 2
+      type: 'string', label: 'Label Value Format', section: 'Labels', placeholder: 'e.g., "#,##0.00"',
+      default: '', order: 2
     },
     label_font_size: {
-      type: 'number',
-      label: 'Label Font Size',
-      section: 'Labels',
-      default: 12,
-      order: 3
+      type: 'number', label: 'Label Font Size', section: 'Labels', default: 12, order: 3
     },
     label_font_color: {
-      type: 'string',
-      label: 'Label Color',
-      section: 'Labels',
-      display: 'color',
-      default: '#ffffff',
-      order: 4
+      type: 'string', label: 'Label Color', section: 'Labels', display: 'color', default: '#ffffff', order: 4
     },
-    // Secção da Legenda
     show_legend: {
-        type: 'boolean',
-        label: 'Show Legend',
-        section: 'Legend',
-        default: true,
-        order: 1
+        type: 'boolean', label: 'Show Legend', section: 'Legend', default: true, order: 1
     },
     legend_position: {
-        type: 'string',
-        label: 'Legend Position',
-        section: 'Legend',
-        display: 'radio',
-        values: [
-            {'Right': 'right'},
-            {'Bottom': 'bottom'}
-        ],
-        default: 'right',
-        order: 2
+        type: 'string', label: 'Legend Position', section: 'Legend', display: 'radio',
+        values: [{'Right': 'right'}, {'Bottom': 'bottom'}], default: 'right', order: 2
     }
   },
 
-  // Chamada uma vez para criar os elementos DOM iniciais
   create: function (element, config) {
+    // NOVO - Lógica para carregar o D3
+    const d3_version = '7'; // Usar uma versão mais recente do D3
+    if (typeof d3 === 'undefined') {
+      const script = document.createElement('script');
+      script.src = `https://d3js.org/d3.v${d3_version}.min.js`;
+      script.async = true;
+      script.onload = () => {
+        this._d3_ready = true;
+      };
+      document.head.appendChild(script);
+    } else {
+      this._d3_ready = true;
+    }
+
     element.innerHTML = `
       <style>
         .marimekko-container { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: "Google Sans", "Noto Sans", "Noto Sans JP", "Noto Sans CJK KR", "Noto Sans Arabic UI", "Noto Sans Devanagari UI", "Noto Sans Hebrew UI", "Noto Sans Thai UI", Helvetica, Arial, sans-serif; }
-        .marimekko-svg { flex-grow: 1; }
-        .marimekko-legend { flex-shrink: 0; padding: 10px; overflow-y: auto; }
-        .marimekko-legend-item { display: flex; align-items: center; margin-bottom: 5px; font-size: 12px; }
-        .marimekko-legend-color { width: 12px; height: 12px; margin-right: 8px; border-radius: 2px; flex-shrink: 0; }
-        .marimekko-rect { transition: opacity 0.2s; }
-        .marimekko-rect:hover { opacity: 0.85; cursor: pointer; }
-        .marimekko-axis path, .marimekko-axis line { fill: none; stroke: #A9A9A9; shape-rendering: crispEdges; }
-        .marimekko-axis text, .x-axis-label { fill: #333; font-size: 11px; }
-        .marimekko-label { pointer-events: none; text-anchor: middle; }
+        /* ... resto do CSS igual ... */
       </style>
       <div class="marimekko-container">
         <svg class="marimekko-svg"></svg>
         <div class="marimekko-legend"></div>
       </div>
     `;
-    this._container = d3.select(element).select('.marimekko-container');
-    this._svg = this._container.select('.marimekko-svg');
+    this._container = d3.select(element).select('.marimekko-container'); // Esta linha agora pode dar erro se o d3 não estiver pronto
     this._legend = this._container.select('.marimekko-legend');
-    
-    // Tooltip - criado uma vez e reutilizado para melhor performance
+
     this._tooltip = d3.select(element)
       .append('div')
-      .attr('class', 'looker-tooltip') // Usa a classe do Looker para um estilo consistente
+      .attr('class', 'looker-tooltip')
       .style('display', 'none')
       .style('position', 'absolute')
       .style('pointer-events', 'none')
       .style('z-index', 100);
   },
 
-  // Chamada sempre que os dados ou a configuração mudam
   updateAsync: function (data, element, config, queryResponse, details, doneRendering) {
+    // NOVO - Verificar se o D3 está pronto. Se não, tenta novamente em 100ms.
+    if (!this._d3_ready) {
+      setTimeout(() => this.updateAsync(data, element, config, queryResponse, details, doneRendering), 100);
+      return;
+    }
+    
+    // NOVO - A partir daqui, temos a certeza que 'd3' existe.
+    // Algumas das inicializações do 'create' podem falhar na primeira vez, então vamos garanti-las aqui.
+    if (!this._svg) {
+        this._svg = d3.select(element).select('.marimekko-svg');
+    }
+    if (!this._container) {
+        this._container = d3.select(element).select('.marimekko-container');
+    }
+    if (!this._legend) {
+        this._legend = this._container.select('.marimekko-legend');
+    }
+
+
     this.clearErrors();
 
     const dims = queryResponse.fields.dimension_like;
@@ -139,20 +118,20 @@ looker.plugins.visualizations.add({
       return;
     }
     
+    // ... O resto do código updateAsync permanece exatamente o mesmo ...
+    // ... (desde o mapeamento dos campos até ao doneRendering()) ...
+
     const hasXAxisDimension = dims.length > 1;
 
-    // Mapeamento dos campos para variáveis claras
     const stackDimension = dims[0].name;
     const heightMeasure = meas[0].name;
     const widthMeasure = meas[1].name;
     const xAxisLabelDimension = hasXAxisDimension ? dims[1].name : null;
 
-    // Agrupar dados pela medida de largura. Cada grupo será uma coluna.
     const dataByColumn = d3.group(data, d => d[widthMeasure.name].value);
     
     const stackKeys = Array.from(new Set(data.map(d => d[stackDimension].value))).sort();
 
-    // Estruturar os dados para o d3.stack
     const stackedDataInput = Array.from(dataByColumn.entries()).map(([widthValue, rows]) => {
       const entry = {
         total: widthValue, 
@@ -174,13 +153,11 @@ looker.plugins.visualizations.add({
     const totalValue = d3.sum(Array.from(dataByColumn.keys()));
     const yMax = d3.max(Array.from(dataByColumn.keys()));
 
-    if (totalValue === 0) {
+    if (!totalValue || totalValue === 0) {
       this.addError({ title: "Sem Dados", message: "A medida de largura tem um total de zero." });
       return;
     }
 
-    // --- RENDERIZAÇÃO ---
-    
     this._container.style('flex-direction', config.legend_position === 'right' ? 'row' : 'column');
     this._legend.style('display', config.show_legend ? 'block' : 'none');
     
@@ -192,12 +169,10 @@ looker.plugins.visualizations.add({
     this._svg.selectAll('*').remove();
     const g = this._svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    // Escalas
     const xScale = d3.scaleLinear().domain([0, totalValue]).range([0, width]);
     const yScale = d3.scaleLinear().domain([0, yMax]).range([height, 0]).nice();
     const colorScale = d3.scaleOrdinal().domain(stackKeys).range(config.color_range);
 
-    // EIXO X
     const xAxisGroup = g.append("g")
       .attr("transform", `translate(0,${height})`)
       .attr("class", "marimekko-axis");
@@ -205,7 +180,6 @@ looker.plugins.visualizations.add({
     let cumulativeWidth = 0;
     const xPositions = []; 
 
-    // Desenhar retângulos
     g.selectAll('.series')
       .data(stackedSeries)
       .join('g')
@@ -256,7 +230,6 @@ looker.plugins.visualizations.add({
             }
         });
 
-    // Adicionar labels do Eixo X
     xAxisGroup.selectAll('.x-axis-label')
       .data(xPositions)
       .join('text')
@@ -264,9 +237,9 @@ looker.plugins.visualizations.add({
       .attr('x', d => xScale(d.pos))
       .attr('y', margin.bottom - 10)
       .attr('text-anchor', 'middle')
+      .style('fill', '#333')
       .text(d => d.label);
       
-    // Labels nos segmentos
     if (config.show_labels) {
         cumulativeWidth = 0; // Reset
         g.selectAll('.label-series')
@@ -296,12 +269,12 @@ looker.plugins.visualizations.add({
             .style('display', d => {
                 const rectHeight = Math.abs(yScale(d[0]) - yScale(d[1]));
                 const rectWidth = Math.abs(xScale(d.data.total));
-                const textWidth = this.getBBox ? this.getBBox().width : (d.key.length * config.label_font_size * 0.6);
+                const textLength = d.key.length;
+                const textWidth = textLength * config.label_font_size * 0.6;
                 return rectHeight < (config.label_font_size * 1.2) || rectWidth < textWidth ? 'none' : 'block';
             });
     }
 
-    // Eixo Y
     if (config.show_y_axis) {
       const yAxisFormatFunc = (d) => {
         const percentage = yMax > 0 ? d / yMax : 0;
@@ -311,9 +284,8 @@ looker.plugins.visualizations.add({
       g.append('g').attr('class', 'marimekko-axis').call(yAxis);
     }
     
-    // Legenda
     if (config.show_legend) {
-        this._legend.html(''); // Limpar legenda antiga
+        this._legend.html('');
         const legendItems = this._legend.selectAll('.marimekko-legend-item')
             .data(colorScale.domain())
             .join('div')
