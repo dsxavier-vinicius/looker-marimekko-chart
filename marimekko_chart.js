@@ -1,5 +1,5 @@
 /**
- * Visualização: Gráfico de Barras de Largura Variável (v3.4 - Cores Dinâmicas)
+ * Visualização: Gráfico de Barras de Largura Variável (v3.5 - Paleta Robusta)
  *
  * ESTRUTURA DE DADOS:
  * 1. Dimensão: As categorias para o eixo X (ex: Cliente).
@@ -7,7 +7,7 @@
  * 3. Medida 2: O valor para a largura de cada barra.
  */
 looker.plugins.visualizations.add({
-  id: 'variable_width_bar_chart_dynamic_colors',
+  id: 'variable_width_bar_chart_robust_palette',
   label: 'Variable Width Bar Chart (Colors)',
 
   _d3_ready: false,
@@ -154,7 +154,8 @@ looker.plugins.visualizations.add({
     if (config.color_by === 'dimension') {
         colorScale = d3.scaleOrdinal()
             .domain(processedData.map(d => d.xCategory))
-            .range(config.color_palette);
+            // --- CORREÇÃO: Garante que a paleta de cores é sempre um array ---
+            .range(Array.isArray(config.color_palette) ? config.color_palette : []);
     } else {
         colorScale = () => config.color_single;
     }
