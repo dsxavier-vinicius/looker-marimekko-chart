@@ -1,135 +1,144 @@
-// Marimekko Chart com melhorias de layout, labels e controles extras
-const marimekko = {
-  id: 'variable_width_area_chart',
-  label: 'Variable Width Area Chart (Marimekko)',
-  options: {
-    bar_color: { type: 'string', label: 'Bar Color', display: 'color', default: '#4682b4' },
-    show_labels: { type: 'boolean', label: 'Show Labels', default: true },
-    show_values: { type: 'boolean', label: 'Show Values Inside Bars', default: false },
-    show_y_axis: { type: 'boolean', label: 'Show Y Axis', default: true },
-    show_x_axis: { type: 'boolean', label: 'Show X Axis', default: true },
-    bar_padding: { type: 'number', label: 'Bar Padding (px)', default: 2 },
-    font_size: { type: 'number', label: 'Label Font Size', default: 12 },
-    font_color: { type: 'string', label: 'Label Color', display: 'color', default: '#ffffff' },
-    label_rotation: { type: 'number', label: 'X-Axis Label Rotation (degrees)', default: 0 },
-    max_bars: { type: 'number', label: 'Max Bars to Display', default: 50 },
-    show_legend: { type: 'boolean', label: 'Show Legend', default: false },
-    legend_position: { type: 'string', label: 'Legend Position', display: 'select', default: 'right', values: [ { label: 'Right', value: 'right' }, { label: 'Bottom', value: 'bottom' } ] }
-  },
-
-  create: function (element) {
-    element.innerHTML = '<svg width="100%" height="460"></svg>'
-  },
-
-  updateAsync: function (data, element, config, queryResponse, details, doneRendering) {
-    const svg = d3.select(element).select('svg')
-    svg.selectAll('*').remove()
-
-    const width = element.clientWidth
-    const height = 400
-    const margin = { top: 20, right: 20, bottom: 60, left: 60 }
-    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
-    const plotWidth = width - margin.left - margin.right
-    const plotHeight = height - margin.top - margin.bottom
-
-    const fields = queryResponse.fields.dimensions.concat(queryResponse.fields.measures)
-    if (fields.length < 3 || !data.length) return doneRendering()
-
-    const labelField = fields[0].name
-    const populationField = fields[1].name
-    const metricField = fields[2].name
-
-    let parsed = data.map(d => {
-      const pop = parseFloat(d[populationField]?.value)
-      const met = parseFloat(d[metricField]?.value)
-      return {
-        label: d[labelField]?.value ?? '',
-        population: isNaN(pop) ? 0 : pop,
-        metric: isNaN(met) ? 0 : met
-      }
-    }).filter(d => d.population > 0 && d.metric >= 0)
-
-    parsed = parsed.slice(0, config.max_bars)
-    const totalPop = d3.sum(parsed, d => d.population)
-    if (!parsed.length || totalPop === 0) return doneRendering()
-
-    let cumulative = 0
-    parsed.forEach(d => {
-      d.x0 = cumulative
-      d.width = d.population / totalPop
-      cumulative += d.width
-    })
-
-    const xScale = d3.scaleLinear().domain([0, 1]).range([0, plotWidth])
-    const yScale = d3.scaleLinear().domain([0, d3.max(parsed, d => d.metric)]).range([plotHeight, 0])
-
-    g.selectAll('rect')
-      .data(parsed)
-      .enter()
-      .append('rect')
-      .attr('x', d => xScale(d.x0))
-      .attr('width', d => Math.max(0, xScale(d.width) - config.bar_padding))
-      .attr('y', d => yScale(d.metric))
-      .attr('height', d => plotHeight - yScale(d.metric))
-      .attr('fill', config.bar_color)
-
-    if (config.show_values) {
-      g.selectAll('text.value')
-        .data(parsed)
-        .enter()
-        .append('text')
-        .attr('class', 'value')
-        .attr('x', d => xScale(d.x0 + d.width / 2))
-        .attr('y', d => yScale(d.metric) + 20)
-        .text(d => d.metric.toFixed(2))
-        .style('fill', config.font_color)
-        .style('font-size', config.font_size)
-        .style('text-anchor', 'middle')
-    }
-
-    if (config.show_labels) {
-      g.selectAll('text.label')
-        .data(parsed)
-        .enter()
-        .append('text')
-        .attr('class', 'label')
-        .attr('x', d => xScale(d.x0 + d.width / 2))
-        .attr('y', plotHeight + 15)
-        .text(d => d.label)
-        .attr('transform', d => `rotate(${config.label_rotation}, ${xScale(d.x0 + d.width / 2)}, ${plotHeight + 15})`)
-        .style('fill', '#333')
-        .style('font-size', config.font_size)
-        .style('text-anchor', 'middle')
-    }
-
-    if (config.show_y_axis) {
-      g.append('g').call(d3.axisLeft(yScale))
-    }
-    if (config.show_x_axis) {
-      const axisX = d3.axisBottom(xScale).tickValues([])
-      g.append('g').attr('transform', `translate(0,${plotHeight})`).call(axisX)
-    }
-
-    if (config.show_legend) {
-      const legend = svg.append('g').attr('class', 'legend')
-      const xOffset = config.legend_position === 'bottom' ? 0 : width - 120
-      const yOffset = config.legend_position === 'bottom' ? height : 20
-      legend.append('rect')
-        .attr('x', xOffset)
-        .attr('y', yOffset)
-        .attr('width', 12)
-        .attr('height', 12)
-        .attr('fill', config.bar_color)
-      legend.append('text')
-        .attr('x', xOffset + 18)
-        .attr('y', yOffset + 10)
-        .text(metricField.replace(/_/g, ' '))
-        .style('font-size', config.font_size)
-        .style('fill', '#333')
-    }
-
-    doneRendering()
-  }
+if (typeof d3 === 'undefined') {
+  const script = document.createElement('script');
+  script.src = 'https://d3js.org/d3.v6.min.js';
+  script.onload = () => registerViz();
+  document.head.appendChild(script);
+} else {
+  registerViz();
 }
 
-looker.plugins.visualizations.add(marimekko)
+function registerViz() {
+  looker.plugins.visualizations.add({
+    id: "marimekko_chart",
+    label: "Marimekko Chart (Variable Width)",
+    options: {
+      show_x_axis: {
+        type: 'boolean',
+        label: 'Show X Axis',
+        default: true
+      },
+      show_y_axis: {
+        type: 'boolean',
+        label: 'Show Y Axis',
+        default: true
+      },
+      show_values: {
+        type: 'boolean',
+        label: 'Show Bar Values',
+        default: false
+      },
+      rotate_x_labels: {
+        type: 'number',
+        label: 'Rotate X Labels (Degrees)',
+        default: 0
+      },
+      max_rows: {
+        type: 'number',
+        label: 'Max Rows to Display',
+        default: 100
+      },
+      legend_position: {
+        type: 'string',
+        label: 'Legend Position',
+        display: 'select',
+        default: 'right',
+        values: [
+          { 'Right': 'right' },
+          { 'Left': 'left' },
+          { 'Top': 'top' },
+          { 'Bottom': 'bottom' }
+        ]
+      }
+    },
+
+    create: function (element, config) {
+      element.innerHTML = `
+        <div id="viz-container" style="width:100%; height:100%;">
+          <svg></svg>
+        </div>
+      `;
+    },
+
+    updateAsync: function (data, element, config, queryResponse, details, done) {
+      const container = element.querySelector("#viz-container");
+      const svg = d3.select(container).select("svg");
+      const width = element.clientWidth;
+      const height = element.clientHeight;
+      svg.html("");
+      svg.attr("width", width).attr("height", height);
+
+      const dimension = queryResponse.fields.dimension_like[0];
+      const widthField = queryResponse.fields.measure_like[0];
+      const heightField = queryResponse.fields.measure_like[1];
+
+      const limitedData = data.slice(0, config.max_rows || 100);
+
+      const processed = limitedData.map(d => ({
+        label: d[dimension.name].value,
+        widthVal: +d[widthField.name].value,
+        heightVal: +d[heightField.name].value
+      }));
+
+      const totalWidth = d3.sum(processed, d => d.widthVal);
+      let xOffset = 0;
+
+      const chartHeight = height - 50;
+      const chartWidth = width - 100;
+
+      const yScale = d3.scaleLinear()
+        .domain([0, d3.max(processed, d => d.heightVal)])
+        .range([chartHeight, 0]);
+
+      const g = svg.append("g").attr("transform", "translate(60,20)");
+
+      // Bars
+      processed.forEach(d => {
+        const barWidth = (d.widthVal / totalWidth) * chartWidth;
+        g.append("rect")
+          .attr("x", xOffset)
+          .attr("y", yScale(d.heightVal))
+          .attr("width", barWidth)
+          .attr("height", chartHeight - yScale(d.heightVal))
+          .attr("fill", "#3f88c5");
+
+        if (config.show_values) {
+          g.append("text")
+            .attr("x", xOffset + barWidth / 2)
+            .attr("y", yScale(d.heightVal) - 5)
+            .attr("text-anchor", "middle")
+            .attr("font-size", "10px")
+            .text(d.heightVal.toLocaleString());
+        }
+
+        d.barX = xOffset + barWidth / 2;
+        xOffset += barWidth;
+      });
+
+      // X Axis
+      if (config.show_x_axis) {
+        const xLabels = processed.map(d => d.label);
+        const xScale = d3.scalePoint()
+          .domain(xLabels)
+          .range([0, xOffset]);
+
+        const xAxis = d3.axisBottom(xScale);
+
+        g.append("g")
+          .attr("transform", `translate(0,${chartHeight})`)
+          .call(xAxis)
+          .selectAll("text")
+          .attr("transform", `rotate(${config.rotate_x_labels || 0})`)
+          .style("text-anchor", config.rotate_x_labels ? "end" : "middle");
+      }
+
+      // Y Axis
+      if (config.show_y_axis) {
+        const yAxis = d3.axisLeft(yScale);
+        g.append("g")
+          .call(yAxis);
+      }
+
+      done();
+    }
+  });
+}
