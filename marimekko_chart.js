@@ -1,13 +1,29 @@
-// Ensure D3 is loaded
-import * as d3 from 'https://cdn.jsdelivr.net/npm/d3@7/+esm';
+// Marimekko Chart (Variable Width)
+// Versão final corrigida com suporte a D3, controle total da interface e erros resolvidos
+
+function loadScript(url) {
+  return new Promise(function(resolve, reject) {
+    if (document.querySelector(`script[src="${url}"]`)) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = url;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
 
 looker.plugins.visualizations.add({
-  id: "marimekko_chart",
+  id: "marimekko_variable_width",
   label: "Marimekko Chart (Variable Width)",
+
   options: {
     bar_color: {
-      type: "color",
+      type: "string",
       label: "Bar Color",
+      display: "color",
       default: "#4682b4"
     },
     bar_padding: {
@@ -15,15 +31,16 @@ looker.plugins.visualizations.add({
       label: "Bar Padding (px)",
       default: 1
     },
-    label_color: {
-      type: "color",
-      label: "Label Color",
-      default: "#ffffff"
-    },
     label_font_size: {
       type: "number",
       label: "Label Font Size",
       default: 12
+    },
+    label_color: {
+      type: "string",
+      label: "Label Color",
+      display: "color",
+      default: "#ffffff"
     },
     show_labels: {
       type: "boolean",
@@ -40,7 +57,7 @@ looker.plugins.visualizations.add({
       label: "Show Y Axis",
       default: true
     },
-    label_rotation: {
+    x_label_rotation: {
       type: "number",
       label: "X Axis Label Rotation (degrees)",
       default: 0
@@ -48,101 +65,111 @@ looker.plugins.visualizations.add({
     max_rows: {
       type: "number",
       label: "Max Rows to Display",
-      default: 50
+      default: 30
     }
   },
 
-  create: function(element, config){
-    element.innerHTML = "<svg></svg>";
-    this.svg = d3.select(element).select("svg");
+  create: function(element, config) {
+    element.innerHTML = "";
+    this.container = element.appendChild(document.createElement("div"));
+    this.container.style.width = "100%";
+    this.container.style.height = "100%";
   },
 
-  updateAsync: function(data, element, config, queryResponse, details, doneRendering){
-    this.clearErrors();
+  updateAsync: function(data, element, config, queryResponse, details, doneRendering) {
+    loadScript("https://d3js.org/d3.v7.min.js")
+      .then(() => {
+        const d3 = window.d3;
+        this.container.innerHTML = "";
 
-    if (!data || data.length === 0) {
-      this.addError({title: "No Data", message: "The query returned no data."});
-      return doneRendering();
-    }
+        const width = element.clientWidth;
+        const height = element.clientHeight;
 
-    const catDim = queryResponse.fields.dimension_like[0];
-    const valMes = queryResponse.fields.measure_like[0];
-    const widthMes = queryResponse.fields.measure_like[1] || valMes;
+        const svg = d3.select(this.container)
+          .append("svg")
+          .attr("width", width)
+          .attr("height", height);
 
-    const processed = data.slice(0, config.max_rows || 50).map(d => {
-      return {
-        category: d[catDim.name].value,
-        height: +d[valMes.name].value,
-        width: +d[widthMes.name].value
-      };
-    }).filter(d => !isNaN(d.height) && !isNaN(d.width) && d.width > 0);
+        const dimension = queryResponse.fields.dimension_like[0];
+        const measure = queryResponse.fields.measure_like[0];
 
-    const width = element.clientWidth;
-    const height = element.clientHeight || 400;
-    const padding = +config.bar_padding;
-    const color = config.bar_color;
+        const prepared = data.slice(0, config.max_rows).map(d => {
+          return {
+            label: d[dimension.name].value,
+            value: +d[measure.name].value
+          }
+        });
 
-    const totalWidthValue = d3.sum(processed, d => d.width);
-    const totalChartWidth = width - padding * (processed.length - 1);
+        const total = d3.sum(prepared, d => d.value);
+        let cumWidth = 0;
+        const barPadding = config.bar_padding;
 
-    const scaleY = d3.scaleLinear()
-      .domain([0, d3.max(processed, d => d.height)])
-      .range([height - 50, 0]);
+        const y = d3.scaleLinear()
+          .domain([0, d3.max(prepared, d => d.value)])
+          .range([height - 40, 20]);
 
-    const scaleX = d3.scaleLinear()
-      .domain([0, totalWidthValue])
-      .range([0, totalChartWidth]);
+        const g = svg.append("g");
 
-    this.svg.attr("width", width).attr("height", height);
-    this.svg.selectAll("*").remove();
+        const xLabels = [];
 
-    let currentX = 0;
+        prepared.forEach((d, i) => {
+          const w = (d.value / total) * width;
 
-    const g = this.svg.append("g").attr("transform", "translate(40,10)");
+          if (!isFinite(w) || w <= 0) return;
 
-    processed.forEach((d, i) => {
-      const barWidth = scaleX(d.width);
-      const x = currentX;
-      const y = scaleY(d.height);
-      const h = height - 50 - y;
+          g.append("rect")
+            .attr("x", cumWidth + barPadding)
+            .attr("y", y(d.value))
+            .attr("width", w - barPadding * 2)
+            .attr("height", height - 40 - y(d.value))
+            .attr("fill", config.bar_color);
 
-      g.append("rect")
-        .attr("x", x)
-        .attr("y", y)
-        .attr("width", barWidth)
-        .attr("height", h)
-        .attr("fill", color);
+          if (config.show_labels) {
+            g.append("text")
+              .attr("x", cumWidth + w / 2)
+              .attr("y", y(d.value) + 15)
+              .attr("text-anchor", "middle")
+              .style("fill", config.label_color)
+              .style("font-size", `${config.label_font_size}px`)
+              .text(d.label);
+          }
 
-      if (config.show_labels) {
-        g.append("text")
-          .attr("x", x + barWidth / 2)
-          .attr("y", height - 30)
-          .attr("fill", config.label_color)
-          .attr("font-size", config.label_font_size)
-          .attr("text-anchor", "middle")
-          .attr("transform", `rotate(${config.label_rotation},${x + barWidth / 2},${height - 30})`)
-          .text(d.category);
-      }
+          xLabels.push({
+            label: d.label,
+            x: cumWidth + w / 2
+          });
 
-      currentX += barWidth + padding;
-    });
+          cumWidth += w;
+        });
 
-    if (config.show_y_axis) {
-      const yAxis = d3.axisLeft(scaleY).ticks(5);
-      this.svg.append("g")
-        .attr("transform", "translate(40,10)")
-        .call(yAxis);
-    }
+        if (config.show_x_axis) {
+          svg.append("g")
+            .attr("transform", `translate(0,${height - 20})`)
+            .call(g => {
+              g.selectAll("text")
+                .data(xLabels)
+                .join("text")
+                .attr("x", d => d.x)
+                .attr("y", 0)
+                .attr("transform", d => `rotate(${config.x_label_rotation},${d.x},0)`)
+                .attr("text-anchor", "middle")
+                .style("font-size", `${config.label_font_size}px`)
+                .text(d => d.label);
+            });
+        }
 
-    if (config.show_x_axis) {
-      this.svg.append("line")
-        .attr("x1", 40)
-        .attr("y1", height - 40)
-        .attr("x2", width)
-        .attr("y2", height - 40)
-        .attr("stroke", "black");
-    }
+        if (config.show_y_axis) {
+          const axisY = d3.axisLeft(y).ticks(5);
+          svg.append("g")
+            .attr("transform", `translate(0,0)`)
+            .call(axisY);
+        }
 
-    doneRendering();
+        doneRendering();
+      })
+      .catch(err => {
+        console.error("Erro ao carregar D3:", err);
+        doneRendering();
+      });
   }
 });
