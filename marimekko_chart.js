@@ -1,153 +1,139 @@
-// Marimekko Chart with full configuration support for Looker
-if (typeof d3 === 'undefined') {
-  const script = document.createElement('script');
-  script.src = 'https://d3js.org/d3.v6.min.js';
-  script.onload = () => registerViz();
-  document.head.appendChild(script);
-} else {
-  registerViz();
-}
-
-function registerViz() {
-  looker.plugins.visualizations.add({
-    id: "marimekko_chart",
-    label: "Marimekko Chart (Variable Width)",
-    options: {
-      bar_color: {
-        type: 'string',
-        label: 'Bar Color',
-        default: '#3f88c5'
-      },
-      bar_padding: {
-        type: 'number',
-        label: 'Bar Padding (px)',
-        default: 1
-      },
-      label_color: {
-        type: 'string',
-        label: 'Label Color',
-        default: '#ffffff'
-      },
-      label_font_size: {
-        type: 'number',
-        label: 'Label Font Size',
-        default: 12
-      },
-      show_labels: {
-        type: 'boolean',
-        label: 'Show Labels',
-        default: true
-      },
-      show_x_axis: {
-        type: 'boolean',
-        label: 'Show X Axis',
-        default: true
-      },
-      show_y_axis: {
-        type: 'boolean',
-        label: 'Show Y Axis',
-        default: true
-      },
-      rotate_x_labels: {
-        type: 'number',
-        label: 'Rotate X Labels (Degrees)',
-        default: 0
-      },
-      max_rows: {
-        type: 'number',
-        label: 'Max Rows to Display',
-        default: 100
-      }
+// Marimekko Chart with full feature set and correct rendering
+looker.plugins.visualizations.add({
+  id: "marimekko_chart_variable_width",
+  label: "Marimekko Chart (Variable Width)",
+  options: {
+    bar_color: {
+      type: "color",
+      label: "Bar Color",
+      default: "#4682b4"
     },
-
-    create: function (element) {
-      element.innerHTML = `<div id="viz-container" style="width:100%; height:100%;"><svg></svg></div>`;
+    bar_padding: {
+      type: "number",
+      label: "Bar Padding (px)",
+      default: 1
     },
+    label_color: {
+      type: "color",
+      label: "Label Color",
+      default: "#ffffff"
+    },
+    label_font_size: {
+      type: "number",
+      label: "Label Font Size",
+      default: 12
+    },
+    show_labels: {
+      type: "boolean",
+      label: "Show Labels",
+      default: true
+    },
+    show_y_axis: {
+      type: "boolean",
+      label: "Show Y Axis",
+      default: true
+    },
+    show_x_axis: {
+      type: "boolean",
+      label: "Show X Axis",
+      default: true
+    },
+    x_axis_label_rotation: {
+      type: "number",
+      label: "X Axis Label Rotation (degrees)",
+      default: 0
+    },
+    max_rows: {
+      type: "number",
+      label: "Max Rows to Display",
+      default: 50
+    }
+  },
+  create: function(element, config) {
+    element.innerHTML = "";
+    this.container = d3.select(element)
+      .append("div")
+      .attr("id", "marimekko_container")
+      .style("width", "100%")
+      .style("height", "100%");
+  },
+  updateAsync: function(data, element, config, queryResponse, details, done) {
+    element.innerHTML = "";
 
-    updateAsync: function (data, element, config, queryResponse, details, done) {
-      const container = element.querySelector("#viz-container");
-      const svg = d3.select(container).select("svg");
-      const width = element.clientWidth;
-      const height = element.clientHeight;
-      svg.html("");
-      svg.attr("width", width).attr("height", height);
+    const container = this.container;
+    const width = element.clientWidth;
+    const height = element.clientHeight;
 
-      const dimension = queryResponse.fields.dimension_like[0];
-      const measure = queryResponse.fields.measure_like[0];
+    const xLabels = data.map(d => d[queryResponse.fields.dimension_like[0].name].value).slice(0, config.max_rows);
+    const widths = data.map(d => +d[queryResponse.fields.measure_like[0].name].value).slice(0, config.max_rows);
+    const heights = data.map(d => +d[queryResponse.fields.measure_like[1].name].value).slice(0, config.max_rows);
 
-      let processed = data.slice(0, config.max_rows).map(row => {
-        return {
-          label: row[dimension.name].value,
-          value: +row[measure.name].value,
-          widthVal: +row[measure.name].value
-        };
-      }).filter(d => !isNaN(d.value) && !isNaN(d.widthVal));
+    const totalWidth = d3.sum(widths);
+    const scaleX = d3.scaleLinear().domain([0, totalWidth]).range([0, width]);
+    const scaleY = d3.scaleLinear().domain([0, d3.max(heights)]).range([height - 60, 20]);
 
-      const totalWidthVal = d3.sum(processed, d => d.widthVal);
+    const svg = d3.select(element)
+      .append("svg")
+      .attr("width", width)
+      .attr("height", height);
 
-      let x = d3.scaleLinear().range([0, width]);
-      let y = d3.scaleLinear().range([height - 40, 10]);
+    let cumulativeWidth = 0;
 
-      x.domain([0, totalWidthVal]);
-      y.domain([0, d3.max(processed, d => d.value)]);
+    const barGroup = svg.append("g");
 
-      let barX = 0;
-      processed.forEach(d => {
-        d.barX = barX;
-        d.barWidth = x(d.widthVal);
-        barX += d.barWidth;
-      });
+    for (let i = 0; i < widths.length; i++) {
+      const barWidth = scaleX(widths[i]);
+      const barHeight = height - scaleY(heights[i]) - 60;
+      const x = scaleX(cumulativeWidth);
+      const y = scaleY(heights[i]);
 
-      svg.selectAll("rect")
-        .data(processed)
-        .enter()
-        .append("rect")
-        .attr("x", d => d.barX)
-        .attr("y", d => y(d.value))
-        .attr("width", d => d.barWidth - config.bar_padding)
-        .attr("height", d => height - 40 - y(d.value))
+      barGroup.append("rect")
+        .attr("x", x + config.bar_padding)
+        .attr("y", y)
+        .attr("width", Math.max(0, barWidth - 2 * config.bar_padding))
+        .attr("height", barHeight)
         .attr("fill", config.bar_color);
 
       if (config.show_labels) {
-        svg.selectAll("text.value")
-          .data(processed)
-          .enter()
-          .append("text")
-          .attr("class", "value")
-          .attr("x", d => d.barX + (d.barWidth / 2))
-          .attr("y", d => y(d.value) - 5)
+        barGroup.append("text")
+          .attr("x", x + barWidth / 2)
+          .attr("y", y + barHeight / 2)
           .attr("fill", config.label_color)
           .attr("font-size", config.label_font_size)
           .attr("text-anchor", "middle")
-          .text(d => d.value);
+          .attr("alignment-baseline", "middle")
+          .text(heights[i]);
       }
 
-      if (config.show_x_axis) {
-        svg.selectAll("text.label")
-          .data(processed)
-          .enter()
-          .append("text")
-          .attr("class", "label")
-          .attr("x", d => d.barX + (d.barWidth / 2))
-          .attr("y", height - 10)
-          .attr("fill", config.label_color)
-          .attr("font-size", config.label_font_size)
-          .attr("text-anchor", "middle")
-          .attr("transform", d => `rotate(${config.rotate_x_labels},${d.barX + (d.barWidth / 2)},${height - 10})`)
-          .text(d => d.label);
-      }
-
-      if (config.show_y_axis) {
-        const yAxis = d3.axisLeft(y).ticks(5);
-        svg.append("g")
-          .attr("transform", "translate(0,0)")
-          .call(yAxis)
-          .selectAll("text")
-          .style("fill", config.label_color)
-          .style("font-size", `${config.label_font_size}px`);
-      }
-
-      done();
+      cumulativeWidth += widths[i];
     }
-  });
-}
+
+    // X Axis
+    if (config.show_x_axis) {
+      const xAxisScale = d3.scalePoint()
+        .domain(xLabels)
+        .range([0, width]);
+
+      const xAxis = d3.axisBottom(xAxisScale);
+
+      svg.append("g")
+        .attr("transform", `translate(0, ${height - 40})`)
+        .call(xAxis)
+        .selectAll("text")
+        .style("text-anchor", config.x_axis_label_rotation ? "end" : "middle")
+        .attr("transform", `rotate(${config.x_axis_label_rotation})`)
+        .attr("dy", "1.5em");
+    }
+
+    // Y Axis
+    if (config.show_y_axis) {
+      const yAxis = d3.axisLeft(scaleY);
+
+      svg.append("g")
+        .attr("transform", "translate(0,0)")
+        .call(yAxis);
+    }
+
+    done();
+  }
+});
