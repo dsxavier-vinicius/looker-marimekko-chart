@@ -1,5 +1,5 @@
 /**
- * Visualização: Gráfico de Barras de Largura Variável (v3.5 - Paleta Robusta)
+ * Visualização: Gráfico de Barras de Largura Variável (v3.3 Definitiva)
  *
  * ESTRUTURA DE DADOS:
  * 1. Dimensão: As categorias para o eixo X (ex: Cliente).
@@ -7,36 +7,27 @@
  * 3. Medida 2: O valor para a largura de cada barra.
  */
 looker.plugins.visualizations.add({
-  id: 'variable_width_bar_chart_robust_palette',
-  label: 'Variable Width Bar Chart (Colors)',
+  id: 'variable_width_bar_chart_definitive',
+  label: 'Variable Width Bar Chart (Final)',
 
   _d3_ready: false,
   _elements_ready: false,
 
   options: {
-    color_by: {
-        type: 'string', label: 'Color Bars By', section: 'Colors & Legend', display: 'select',
-        values: [{'Single Color': 'single'}, {'By Client (Dimension)': 'dimension'}],
-        default: 'single', order: 1
-    },
-    color_single: {
-        type: 'string', display: 'color', label: 'Bar Color', section: 'Colors & Legend', default: '#4285F4', order: 2
-    },
-    color_palette: {
-        type: 'array', display: 'colors', label: 'Color Palette (for Dimension)', section: 'Colors & Legend',
-        default: ['#4285F4', '#DB4437', '#F4B400', '#0F9D58', '#AB47BC', '#00ACC1', '#FF7043', '#9E9D24'], order: 3
-    },
-    show_legend: {
-        type: 'boolean', label: 'Show Legend', section: 'Colors & Legend', default: true, order: 4
+    bar_color: {
+        type: 'string', display: 'color', label: 'Bar Color', section: 'General',
+        default: '#4285F4', order: 1
     },
     bar_spacing: {
-        type: 'number', label: 'Space Between Bars (px)', section: 'General', default: 3, order: 1
+        type: 'number', label: 'Space Between Bars (px)', section: 'General',
+        default: 3, order: 2
     },
     show_y_axis: {
       type: 'boolean', label: 'Show Y-Axis', section: 'Axes', default: true, order: 1
     },
     y_axis_format: {
-        type: 'string', label: 'Y-Axis Value Format', section: 'Axes', placeholder: 'e.g., "#,##0.0"', default: '', order: 2
+        type: 'string', label: 'Y-Axis Value Format', section: 'Axes', placeholder: 'e.g., "#,##0.0"',
+        default: '', order: 2
     },
     show_labels: {
       type: 'boolean', label: 'Show Value Labels', section: 'Labels', default: true, order: 1
@@ -47,7 +38,8 @@ looker.plugins.visualizations.add({
         default: 'inside_top', order: 2
     },
     label_rotation: {
-        type: 'number', label: 'Label Rotation (°)', section: 'Labels', default: 0, order: 3
+        type: 'number', label: 'Label Rotation (°)', section: 'Labels',
+        default: 0, order: 3
     },
     label_font_size: {
       type: 'number', label: 'Label Font Size', section: 'Labels', default: 12, order: 4
@@ -73,11 +65,7 @@ looker.plugins.visualizations.add({
     }
     element.innerHTML = `
       <style>
-        .dynamic-color-chart-container { display: flex; flex-direction: column; width: 100%; height: 100%; font-family: "Google Sans", "Noto Sans", sans-serif; }
-        .chart-svg-area { flex-grow: 1; }
-        .chart-legend-area { flex-shrink: 0; padding: 10px; text-align: center; overflow-y: auto; }
-        .legend-item { display: inline-flex; align-items: center; margin-right: 15px; margin-bottom: 5px; font-size: 12px; }
-        .legend-color-swatch { width: 12px; height: 12px; margin-right: 8px; border-radius: 2px; flex-shrink: 0; }
+        .final-chart-container { width: 100%; height: 100%; font-family: "Google Sans", "Noto Sans", sans-serif; }
         .bar-rect:hover { opacity: 0.85; cursor: pointer; }
         .chart-axis path, .chart-axis line { fill: none; stroke: #C0C0C0; shape-rendering: crispEdges; }
         .chart-axis text, .x-axis-label { fill: #333; font-size: 12px; }
@@ -92,9 +80,8 @@ looker.plugins.visualizations.add({
         .tooltip-metric-label { color: #616161; margin-right: 16px; }
         .tooltip-metric-value { font-weight: bold; }
       </style>
-      <div class="dynamic-color-chart-container">
-        <svg class="chart-svg-area"></svg>
-        <div class="chart-legend-area"></div>
+      <div class="final-chart-container">
+        <svg class="final-chart-svg"></svg>
       </div>
     `;
   },
@@ -102,16 +89,12 @@ looker.plugins.visualizations.add({
   updateAsync: function (data, element, config, queryResponse, details, doneRendering) {
     if (!this._d3_ready) { setTimeout(() => this.updateAsync(data, element, config, queryResponse, details, doneRendering), 100); return; }
     if (!this._elements_ready) {
-      this._container = d3.select(element).select('.dynamic-color-chart-container');
-      this._svg = this._container.select('.chart-svg-area');
-      this._legend = this._container.select('.chart-legend-area');
+      this._svg = d3.select(element).select('.final-chart-svg');
       this._tooltip = d3.select(element).append('div').attr('class', 'looker-tooltip custom-tooltip').style('display', 'none').style('position', 'absolute').style('pointer-events', 'none').style('z-index', 100);
       this._elements_ready = true;
     }
-    
     this.clearErrors();
     this._svg.selectAll('*').remove();
-    this._legend.html('');
     if (data.length === 0) { doneRendering(); return; }
     
     const dims = queryResponse.fields.dimension_like;
@@ -119,7 +102,9 @@ looker.plugins.visualizations.add({
 
     if (dims.length < 1 || meas.length < 2) { this.addError({ title: 'Estrutura de Campos Inválida', message: 'Requer 1 Dimensão e 2 Medidas.'}); return; }
 
-    const xDimension = dims[0], yMeasure = meas[0], widthMeasure = meas[1];
+    const xDimension = dims[0];
+    const yMeasure = meas[0];
+    const widthMeasure = meas[1];
 
     let cumulativeWidthInDataUnits = 0;
     const processedData = data.map((row, index) => {
@@ -140,29 +125,22 @@ looker.plugins.visualizations.add({
     const yMax = d3.max(processedData, d => d.yValue);
 
     const margin = { top: 20, right: 20, bottom: 50, left: 60 };
-    const chartHeight = Math.max(0, element.clientHeight - margin.top - margin.bottom);
     const chartWidth = Math.max(0, element.clientWidth - margin.left - margin.right);
-    const g = this._svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const chartHeight = Math.max(0, element.clientHeight - margin.top - margin.bottom);
     
+    this._svg.attr('width', '100%').attr('height', '100%');
+    const g = this._svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
     const spacing = parseFloat(config.bar_spacing) || 0;
     const totalSpacing = (data.length - 1) * spacing;
     const drawableBarWidth = Math.max(0, chartWidth - totalSpacing);
     const xScale = d3.scaleLinear().domain([0, totalWidthInDataUnits > 0 ? totalWidthInDataUnits : 1]).range([0, drawableBarWidth]);
     const yScale = d3.scaleLinear().domain([0, yMax > 0 ? yMax : 1]).range([chartHeight, 0]).nice();
 
-    let colorScale;
-    if (config.color_by === 'dimension') {
-        colorScale = d3.scaleOrdinal()
-            .domain(processedData.map(d => d.xCategory))
-            // --- CORREÇÃO: Garante que a paleta de cores é sempre um array ---
-            .range(Array.isArray(config.color_palette) ? config.color_palette : []);
-    } else {
-        colorScale = () => config.color_single;
-    }
-
     if (config.show_y_axis) { g.append('g').attr('class', 'chart-axis').call(d3.axisLeft(yScale).tickFormat(d3.format(config.y_axis_format || ','))); }
     const xAxisGroup = g.append("g").attr("transform", `translate(0,${chartHeight})`).attr("class", "chart-axis");
     
+    // Cadeia de D3 para desenhar as barras. Revisto para garantir que não há ponto e vírgula a meio.
     g.selectAll('.bar-rect')
       .data(processedData)
       .join('rect')
@@ -171,7 +149,7 @@ looker.plugins.visualizations.add({
         .attr('y', d => { const y = yScale(d.yValue); return isNaN(y) ? 0 : y; })
         .attr('width', d => { const w = xScale(d.widthValue); return isNaN(w) ? 0 : w; })
         .attr('height', d => { const h = chartHeight - yScale(d.yValue); return isNaN(h) || h < 0 ? 0 : h; })
-        .attr('fill', d => colorScale(d.xCategory))
+        .attr('fill', config.bar_color)
         .on('mouseover', (event, d) => {
             const percentageOfTotalWidth = totalWidthInDataUnits > 0 ? (d.widthValue / totalWidthInDataUnits * 100) : 0;
             const tooltipHtml = `
@@ -192,10 +170,19 @@ looker.plugins.visualizations.add({
             this._tooltip.html(tooltipHtml).style('display', 'block');
         })
         .on('mousemove', (event) => {
-            this._tooltip.style('left', (event.pageX + 15) + 'px').style('top', (event.pageY + 15) + 'px');
+            this._tooltip
+                .style('left', (event.pageX + 15) + 'px')
+                .style('top', (event.pageY + 15) + 'px');
         })
-        .on('mouseout', () => { this._tooltip.style('display', 'none'); })
-        .on('click', (event, d) => { LookerCharts.Utils.openDrillMenu({ links: d._cells.x.links, event: event }); });
+        .on('mouseout', () => {
+            this._tooltip.style('display', 'none');
+        })
+        .on('click', (event, d) => {
+            LookerCharts.Utils.openDrillMenu({
+                links: d._cells.x.links,
+                event: event
+            });
+        }); // O ponto e vírgula só aparece aqui, no final de toda a cadeia.
 
     processedData.forEach(d => {
         const barW = xScale(d.widthValue);
@@ -217,9 +204,8 @@ looker.plugins.visualizations.add({
                 .attr('class', 'bar-label')
                 .text(d => LookerCharts.Utils.textForCell(d._cells.y))
                 .attr('font-size', `${config.label_font_size}px`)
-                .attr('fill', d => {
-                    const barColor = colorScale(d.xCategory);
-                    const luminance = this.getLuminance(barColor);
+                .attr('fill', () => {
+                    const luminance = this.getLuminance(config.bar_color);
                     return luminance > 0.5 ? config.label_dark_color : config.label_light_color;
                 })
                 .attr('transform', d => {
@@ -244,30 +230,7 @@ looker.plugins.visualizations.add({
                 });
     }
 
-    this.updateLegend(config, colorScale);
     doneRendering();
-  },
-
-  updateLegend: function(config, colorScale) {
-    this._legend.html('');
-    if (!config.show_legend || config.color_by !== 'dimension') {
-        this._legend.style('padding', '0px');
-        return;
-    }
-    this._legend.style('padding', '10px');
-    
-    const legendData = colorScale.domain();
-    const legendItems = this._legend.selectAll('.legend-item')
-        .data(legendData)
-        .join('div')
-            .attr('class', 'legend-item');
-
-    legendItems.append('div')
-        .attr('class', 'legend-color-swatch')
-        .style('background-color', d => colorScale(d));
-        
-    legendItems.append('span')
-        .text(d => d);
   },
 
   getLuminance: function(hex) {
