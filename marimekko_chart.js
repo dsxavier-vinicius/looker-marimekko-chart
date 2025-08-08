@@ -17,7 +17,7 @@ looker.plugins.visualizations.add({
       values: [ { 'Inside': 'inside' }, { 'Outside': 'outside' } ],
       default: 'inside'
     },
-    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 0 },
+    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 5 },
     label_font_size: { type: 'number', label: 'Label Font Size', default: 12 },
     label_light_color: { type: 'string', display: 'color', label: 'Label Color on Dark Bar', default: '#FFF' },
     label_dark_color: { type: 'string', display: 'color', label: 'Label Color on Light Bar', default: '#000' }
