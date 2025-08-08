@@ -1,4 +1,4 @@
-// Looker Custom Visualization: Refined Variable Width Bar Chart (Reactive & Polished)
+// Looker Custom Visualization: Refined Variable Width Bar Chart (Reactive & Polished + Resize + Label Fix)
 
 let d3ready = false;
 
@@ -17,7 +17,7 @@ looker.plugins.visualizations.add({
       values: [ { 'Inside': 'inside' }, { 'Outside': 'outside' } ],
       default: 'inside'
     },
-    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 0 },
+    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 5 },
     label_font_size: { type: 'number', label: 'Label Font Size', default: 12 },
     label_light_color: { type: 'string', display: 'color', label: 'Label Color on Dark Bar', default: '#FFF' },
     label_dark_color: { type: 'string', display: 'color', label: 'Label Color on Light Bar', default: '#000' }
@@ -45,6 +45,20 @@ looker.plugins.visualizations.add({
         <div class="tooltip"></div>
       </div>
     `;
+
+    // Resize Observer
+    this._resizeObserver = new ResizeObserver(() => {
+      if (d3ready) this.trigger('update');
+    });
+    const container = element.querySelector('.chart-container');
+    if (container) this._resizeObserver.observe(container);
+  },
+
+  destroy(element) {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      delete this._resizeObserver;
+    }
   },
 
   updateAsync(data, element, config, queryResponse, details, doneRendering) {
@@ -126,14 +140,27 @@ looker.plugins.visualizations.add({
         .attr('class', 'label')
         .text(d => d.tooltip.y.rendered)
         .attr('x', d => xScale(d.x + d.width / 2))
-        .attr('y', d => config.label_position === 'outside' ? yScale(d.height) - 4 : yScale(d.height) + config.label_font_size)
+        .attr('y', d => {
+          const baseY = yScale(d.height);
+          if (config.label_position === 'outside') {
+            return config.label_rotation !== 0 ? baseY - 5 : baseY - 10;
+          } else {
+            return baseY + config.label_font_size + 2;
+          }
+        })
         .attr('fill', () => {
           const luminance = d3.hsl(config.bar_color).l;
           return luminance > 0.6 ? config.label_dark_color : config.label_light_color;
         })
         .attr('text-anchor', 'middle')
         .attr('font-size', config.label_font_size)
-        .attr('transform', d => `rotate(${config.label_rotation}, ${xScale(d.x + d.width / 2)}, ${yScale(d.height)})`);
+        .attr('transform', d => {
+          const x = xScale(d.x + d.width / 2);
+          const y = config.label_position === 'outside'
+            ? yScale(d.height) - 5
+            : yScale(d.height) + config.label_font_size + 2;
+          return `rotate(${config.label_rotation}, ${x}, ${y})`;
+        });
     }
 
     doneRendering();
