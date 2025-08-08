@@ -1,4 +1,4 @@
-// Looker Custom Visualization: Refined Variable Width Bar Chart (Reactive & Polished + Resize + Label Fix)
+// Looker Custom Visualization: Refined Variable Width Bar Chart (Reactive, Resize Fix, Label Fix)
 
 let d3ready = false;
 
@@ -8,7 +8,7 @@ looker.plugins.visualizations.add({
 
   options: {
     bar_color: { type: 'string', display: 'color', label: 'Bar Color', default: '#4285F4' },
-    bar_spacing: { type: 'number', label: 'Bar Spacing (px)', default: 5 },
+    bar_spacing: { type: 'number', label: 'Bar Spacing (px)', default: 4 },
     show_y_axis: { type: 'boolean', label: 'Show Y Axis', default: true },
     y_axis_format: { type: 'string', label: 'Y Axis Format', default: '' },
     show_labels: { type: 'boolean', label: 'Show Labels', default: true },
@@ -17,7 +17,7 @@ looker.plugins.visualizations.add({
       values: [ { 'Inside': 'inside' }, { 'Outside': 'outside' } ],
       default: 'inside'
     },
-    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 270 },
+    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 0 },
     label_font_size: { type: 'number', label: 'Label Font Size', default: 12 },
     label_light_color: { type: 'string', display: 'color', label: 'Label Color on Dark Bar', default: '#FFF' },
     label_dark_color: { type: 'string', display: 'color', label: 'Label Color on Light Bar', default: '#000' }
@@ -46,19 +46,21 @@ looker.plugins.visualizations.add({
       </div>
     `;
 
-    // Resize Observer
-    this._resizeObserver = new ResizeObserver(() => {
-      if (d3ready) this.trigger('update');
-    });
-    const container = element.querySelector('.chart-container');
-    if (container) this._resizeObserver.observe(container);
+    // Fix para redimensionamento completo do container
+    this._lastWidth = element.clientWidth;
+    this._lastHeight = element.clientHeight;
+
+    this._resizeInterval = setInterval(() => {
+      if (element.clientWidth !== this._lastWidth || element.clientHeight !== this._lastHeight) {
+        this._lastWidth = element.clientWidth;
+        this._lastHeight = element.clientHeight;
+        this.trigger('update');
+      }
+    }, 400);
   },
 
   destroy(element) {
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      delete this._resizeObserver;
-    }
+    clearInterval(this._resizeInterval);
   },
 
   updateAsync(data, element, config, queryResponse, details, doneRendering) {
@@ -97,8 +99,8 @@ looker.plugins.visualizations.add({
     });
 
     const margin = { top: 20, right: 20, bottom: 60, left: 50 };
-    const width = element.offsetWidth - margin.left - margin.right;
-    const height = element.offsetHeight - margin.top - margin.bottom;
+    const width = element.clientWidth - margin.left - margin.right;
+    const height = element.clientHeight - margin.top - margin.bottom;
     const chart = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const xScale = d3.scaleLinear().domain([0, cumulativeWidth]).range([0, width]);
