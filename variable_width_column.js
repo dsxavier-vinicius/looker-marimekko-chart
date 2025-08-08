@@ -8,7 +8,7 @@ looker.plugins.visualizations.add({
 
   options: {
     bar_color: { type: 'string', display: 'color', label: 'Bar Color', default: '#4285F4' },
-    bar_spacing: { type: 'number', label: 'Bar Spacing (px)', default: 4 },
+    bar_spacing: { type: 'number', label: 'Bar Spacing (px)', default: 5 },
     show_y_axis: { type: 'boolean', label: 'Show Y Axis', default: true },
     y_axis_format: { type: 'string', label: 'Y Axis Format', default: '' },
     show_labels: { type: 'boolean', label: 'Show Labels', default: true },
@@ -17,7 +17,7 @@ looker.plugins.visualizations.add({
       values: [ { 'Inside': 'inside' }, { 'Outside': 'outside' } ],
       default: 'inside'
     },
-    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 5 },
+    label_rotation: { type: 'number', label: 'Label Rotation (°)', default: 270 },
     label_font_size: { type: 'number', label: 'Label Font Size', default: 12 },
     label_light_color: { type: 'string', display: 'color', label: 'Label Color on Dark Bar', default: '#FFF' },
     label_dark_color: { type: 'string', display: 'color', label: 'Label Color on Light Bar', default: '#000' }
